@@ -1,8 +1,5 @@
-extern highp vec3 pos;
-extern highp vec3 dir;
-extern highp float width;
-extern highp float height;
-extern highp float fov;
+extern highp vec3 pos, dir;
+extern highp float width, height, fov;
 extern highp float time;
 extern highp float lightRadiusMultiplier;
 extern highp float mixRatio;
@@ -59,18 +56,12 @@ Sphere spheres[] = Sphere[] (
 );
 
 Plane planes[] = Plane[] (
-	//Plane(vec3(0,0,-35), vec3(0,0,1), vec3(1), 1),
-	//Plane(vec3(0,0,35), vec3(0,0,-1), vec3(1), 1),
 	Plane(vec3(0,-5,0), vec3(0,1,0), vec3(1), 1)
-	//Plane(vec3(0,15,0), vec3(0,-1,0), vec3(1), 1),
-	//Plane(vec3(-25,0,0), vec3(1,0,0), vec3(1), 1),
-	//Plane(vec3(25,0,0), vec3(-1,0,0), vec3(1), 1)
 );
 
 Light lights[] = Light[] (
 	Light(vec3(-19,15,28), vec3(.7, .3,.3), 1),
 	Light(vec3(18,17,26), vec3(.3,.7,.7), 1)
-	//Light(vec3(1,23,15), vec3(.5), 4)
 );
 
 //http://byteblacksmith.com/improvements-to-the-canonical-one-liner-glsl-rand-for-opengl-es-2-0/
@@ -94,9 +85,12 @@ highp vec3 rand3() {
 	return vec3(rand() - 0.5, rand() - 0.5, rand() - 0.5);
 }
 
+// find nearest intersection with ray
 Hit raycast(Ray ray) {
 	Hit data = Hit(-1, vec3(0), vec3(0), vec3(0), 0, NONE, 0);
 	highp float dist = 1e6;
+
+	// check the spheres
 	for (int i = 0; i < spheres.length(); i++) {
 		Sphere sphere = spheres[i];
 		highp vec3 v = sphere.pos - ray.pos;
@@ -119,6 +113,7 @@ Hit raycast(Ray ray) {
 		}
 	}
 
+	// check the lights
 	for (int i = 0; i < lights.length(); i++) {
 		Light light = lights[i];
 		highp vec3 v = light.pos - ray.pos;
@@ -141,9 +136,7 @@ Hit raycast(Ray ray) {
 		}
 	}
 
-
-	if (data.type != NONE) return data;
-
+	// check the planes
 	for (int i = 0; i < planes.length(); i++) {
 		Plane plane = planes[i];
 
@@ -168,9 +161,12 @@ Hit raycast(Ray ray) {
 	return data;
 }
 
+// entry point
 vec4 effect(vec4 color, Image tex, vec2 texture_coords, vec2 screen_coords) {
+	// seed the random number generator
 	randState = screen_coords * time;
 
+	// determine the materials from state
 	if (materialStage != 0) {
 		for (int i = 0; i < spheres.length(); i++) {
 			if (materialStage == 1) spheres[i].roughness = 0;
@@ -179,6 +175,12 @@ vec4 effect(vec4 color, Image tex, vec2 texture_coords, vec2 screen_coords) {
 		}
 	}
 
+	// determine lights size from state
+	for (int i = 0; i < lights.length(); i++) {
+		lights[i].radius *= lightRadiusMultiplier;
+	}
+
+	// calculate camera direction from screen coordinate
 	highp vec3 UP_VECTOR = normalize(vec3(0.0, 1.0, 0.0));
 	highp vec3 FORE_VECTOR = normalize(dir);
 	highp vec3 RIGHT_VECTOR = cross(FORE_VECTOR, UP_VECTOR);
@@ -196,10 +198,9 @@ vec4 effect(vec4 color, Image tex, vec2 texture_coords, vec2 screen_coords) {
 		+ TOP_VECTOR * (TOP_EXTENT * (antialias.y/height - 0.5) * -2) 
 	);
 
-	for (int i = 0; i < lights.length(); i++) {
-		lights[i].radius *= lightRadiusMultiplier;
-	}
-
+	// main pathtracing loop
+	// keep taking one random subpath until depth exceeded
+	// do this for multiple samples
 	// help from https://wwwtyro.net/2018/02/25/caffeine.html
 	for (int times = 0; times < 15; times++) {
 		for (int i = 0; i < lights.length(); i++) {
@@ -240,6 +241,7 @@ vec4 effect(vec4 color, Image tex, vec2 texture_coords, vec2 screen_coords) {
 		}
 	}
 
+	// mix old and new frame
 	highp vec3 buffer_color = Texel(tex, texture_coords).xyz;
 	return vec4(mix(buffer_color, end_color, mixRatio), 1.0);
 }
